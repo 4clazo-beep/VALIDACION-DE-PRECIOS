@@ -602,7 +602,7 @@
       });
     }
 
-    function promptCrearProductoNuevo() {
+   function promptCrearProductoNuevo() {
       const nombreNuevo = prompt("Ingrese el nombre del nuevo perfume o producto:");
       if (!nombreNuevo || !nombreNuevo.trim()) return;
       const nombreLimpio = nombreNuevo.trim();
@@ -614,19 +614,37 @@
         return;
       }
 
+      const fechaHoy = new Date().toISOString().split('T')[0];
+
       baseDatos.productos[productoKey] = {
         nombre: nombreLimpio,
         precioAnterior: 0,
         precioActual: 0,
         proveedor: "Pendiente",
-        fecha: new Date().toISOString().split('T')[0]
+        fechaCreacion: fechaHoy, // Guardamos la fecha de creación del artículo nuevo
+        fecha: fechaHoy
       };
 
       guardarEnFirebase();
       document.getElementById('producto').value = nombreLimpio;
+      
+      // Mostrar la información del artículo creado en la zona de alertas
+      mostrarAlerta(`
+        <div class="flex items-start gap-3">
+          <i class="fa-solid fa-sparkles text-2xl text-indigo-600"></i>
+          <div>
+            <h4 class="font-bold text-indigo-900">Artículo Creado Correctamente</h4>
+            <ul class="text-xs text-indigo-800 mt-1 space-y-1">
+              <li>• <strong>Nombre:</strong> ${nombreLimpio}</li>
+              <li>• <strong>Precio Creado:</strong> $0.00 (Pendiente de Factura)</li>
+              <li>• <strong>Fecha de Creación:</strong> ${fechaHoy}</li>
+            </ul>
+          </div>
+        </div>
+      `, 'nuevo');
+
       alert(`¡Producto "${nombreLimpio}" creado y seleccionado!`);
     }
-
     function registrarCompra(e) {
       e.preventDefault();
       const proveedor = document.getElementById('proveedor').value.trim();
@@ -638,7 +656,6 @@
       const numFactura = document.getElementById('numFactura').value.trim() || 'N/A';
 
       const moduloBenchmarking = document.getElementById('moduloBenchmarking');
-      const textoBenchmarking = document.getElementById('textoBenchmarking');
       
       let mensajeAlerta = "";
       let tipoAlerta = "";
@@ -647,31 +664,76 @@
       const umbralTolerancia = parseFloat(document.getElementById('umbralAlerta').value) || 0;
 
       if (baseDatos.productos[productoKey] && baseDatos.productos[productoKey].precioActual > 0) {
+        // Producto ya existente con historial previo
         const registroPrevio = baseDatos.productos[productoKey];
         const precioAnterior = registroPrevio.precioActual;
+        const fechaAnteriorCompra = registroPrevio.fecha || 'N/A';
+        
         diferenciaCalculada = precioNuevo - precioAnterior;
         porcentajeCalculado = parseFloat((((precioNuevo - precioAnterior) / precioAnterior) * 100).toFixed(2));
 
         if (precioNuevo > precioAnterior) {
           if (porcentajeCalculado >= umbralTolerancia) {
             tipoAlerta = "alza-critica";
-            mensajeAlerta = `<div class="flex items-start gap-3">
-              <i class="fa-solid fa-triangle-exclamation text-2xl text-rose-600"></i>
-              <div>
-                <h4 class="font-bold text-rose-900">¡ALERTA CRÍTICA DE SOBREPRECIO (+${porcentajeCalculado}%)!</h4>
-                <p class="text-xs text-rose-800 mt-1">Superó el umbral (${umbralTolerancia}%). Anterior: $${precioAnterior.toLocaleString('es-CO')} ➔ Nuevo: $${precioNuevo.toLocaleString('es-CO')}</p>
-              </div>
-            </div>`;
+            mensajeAlerta = `
+              <div class="flex items-start gap-3">
+                <i class="fa-solid fa-triangle-exclamation text-2xl text-rose-600"></i>
+                <div>
+                  <h4 class="font-bold text-rose-900">¡ALERTA CRÍTICA DE SOBREPRECIO (+${porcentajeCalculado}%)!</h4>
+                  <ul class="text-xs text-rose-800 mt-1 space-y-1">
+                    <li>• <strong>Nombre:</strong> ${productoNombre}</li>
+                    <li>• <strong>Precio Antiguo:</strong> $${precioAnterior.toLocaleString('es-CO')} (${registroPrevio.proveedor})</li>
+                    <li>• <strong>Precio Nuevo:</strong> $${precioNuevo.toLocaleString('es-CO')} (${proveedor})</li>
+                    <li>• <strong>Fecha Anterior de Compra:</strong> ${fechaAnteriorCompra}</li>
+                  </ul>
+                </div>
+              </div>`;
           } else {
             tipoAlerta = "alza-moderada";
-            mensajeAlerta = `<div class="flex items-start gap-3"><i class="fa-solid fa-circle-exclamation text-2xl text-amber-600"></i><div><h4 class="font-bold text-amber-900">Incremento Leve Detectado (+${porcentajeCalculado}%)</h4></div></div>`;
+            mensajeAlerta = `
+              <div class="flex items-start gap-3">
+                <i class="fa-solid fa-circle-exclamation text-2xl text-amber-600"></i>
+                <div>
+                  <h4 class="font-bold text-amber-900">Incremento Leve Detectado (+${porcentajeCalculado}%)</h4>
+                  <ul class="text-xs text-amber-800 mt-1 space-y-1">
+                    <li>• <strong>Nombre:</strong> ${productoNombre}</li>
+                    <li>• <strong>Precio Antiguo:</strong> $${precioAnterior.toLocaleString('es-CO')}</li>
+                    <li>• <strong>Precio Nuevo:</strong> $${precioNuevo.toLocaleString('es-CO')}</li>
+                    <li>• <strong>Fecha Anterior de Compra:</strong> ${fechaAnteriorCompra}</li>
+                  </ul>
+                </div>
+              </div>`;
           }
         } else if (precioNuevo < precioAnterior) {
           tipoAlerta = "baja";
-          mensajeAlerta = `<div class="flex items-start gap-3"><i class="fa-solid fa-circle-check text-2xl text-emerald-600"></i><div><h4 class="font-bold text-emerald-900">¡REDUCCIÓN DE PRECIO (${porcentajeCalculado}%)!</h4></div></div>`;
+          mensajeAlerta = `
+            <div class="flex items-start gap-3">
+              <i class="fa-solid fa-circle-check text-2xl text-emerald-600"></i>
+              <div>
+                <h4 class="font-bold text-emerald-900">¡REDUCCIÓN DE PRECIO (${porcentajeCalculado}%)!</h4>
+                <ul class="text-xs text-emerald-800 mt-1 space-y-1">
+                  <li>• <strong>Nombre:</strong> ${productoNombre}</li>
+                  <li>• <strong>Precio Antiguo:</strong> $${precioAnterior.toLocaleString('es-CO')}</li>
+                  <li>• <strong>Precio Nuevo:</strong> $${precioNuevo.toLocaleString('es-CO')}</li>
+                  <li>• <strong>Fecha Anterior de Compra:</strong> ${fechaAnteriorCompra}</li>
+                </ul>
+              </div>
+            </div>`;
         } else {
           tipoAlerta = "igual";
-          mensajeAlerta = `<div class="flex items-start gap-3"><i class="fa-solid fa-circle-info text-2xl text-blue-600"></i><div><h4 class="font-bold text-blue-900">Precio Estable</h4></div></div>`;
+          mensajeAlerta = `
+            <div class="flex items-start gap-3">
+              <i class="fa-solid fa-circle-info text-2xl text-blue-600"></i>
+              <div>
+                <h4 class="font-bold text-blue-900">Precio Estable</h4>
+                <ul class="text-xs text-blue-800 mt-1 space-y-1">
+                  <li>• <strong>Nombre:</strong> ${productoNombre}</li>
+                  <li>• <strong>Precio Antiguo:</strong> $${precioAnterior.toLocaleString('es-CO')}</li>
+                  <li>• <strong>Precio Actual:</strong> $${precioNuevo.toLocaleString('es-CO')}</li>
+                  <li>• <strong>Fecha Anterior de Compra:</strong> ${fechaAnteriorCompra}</li>
+                </ul>
+              </div>
+            </div>`;
         }
 
         baseDatos.productos[productoKey] = {
@@ -679,11 +741,29 @@
           precioAnterior: precioAnterior,
           precioActual: precioNuevo,
           proveedor: proveedor,
+          fechaCreacion: registroPrevio.fechaCreacion || fecha,
           fecha: fecha
         };
+
       } else {
+        // Producto nuevo al que se le registra su primera factura o se formaliza
+        const registroPrevio = baseDatos.productos[productoKey] || {};
+        const fechaCreacionArticulo = registroPrevio.fechaCreacion || fecha;
+
         tipoAlerta = "nuevo";
-        mensajeAlerta = `<div class="flex items-start gap-3"><i class="fa-solid fa-sparkles text-2xl text-indigo-600"></i><div><h4 class="font-bold text-indigo-900">Nuevo Producto Registrado</h4></div></div>`;
+        mensajeAlerta = `
+          <div class="flex items-start gap-3">
+            <i class="fa-solid fa-sparkles text-2xl text-indigo-600"></i>
+            <div>
+              <h4 class="font-bold text-indigo-900">Primer Registro de Factura para el Artículo</h4>
+              <ul class="text-xs text-indigo-800 mt-1 space-y-1">
+                <li>• <strong>Nombre:</strong> ${productoNombre}</li>
+                <li>• <strong>Precio Creado / Ingresado:</strong> $${precioNuevo.toLocaleString('es-CO')}</li>
+                <li>• <strong>Fecha de Creación del Artículo:</strong> ${fechaCreacionArticulo}</li>
+              </ul>
+            </div>
+          </div>`;
+        
         moduloBenchmarking.classList.add('hidden');
 
         baseDatos.productos[productoKey] = {
@@ -691,6 +771,7 @@
           precioAnterior: precioNuevo,
           precioActual: precioNuevo,
           proveedor: proveedor,
+          fechaCreacion: fechaCreacionArticulo,
           fecha: fecha
         };
       }
@@ -707,6 +788,7 @@
 
       guardarEnFirebase();
       mostrarAlerta(mensajeAlerta, tipoAlerta);
+      renderizarTablas();
 
       document.getElementById('producto').value = '';
       document.getElementById('precio').value = '';
