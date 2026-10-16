@@ -17,24 +17,16 @@
     import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // ==========================================
-    // CONFIGURACIÓN DE FIREBASE (¡REEMPLAZA CON TUS DATOS!)
+    // CONFIGURACIÓN DE FIREBASE
     // ==========================================
     const firebaseConfig = {
-
-  apiKey: "AIzaSyA5h_-qtvMqrRCtyVBPNiV-JfX22sHuFaM",
-
-  authDomain: "validacion-costos.firebaseapp.com",
-
-  projectId: "validacion-costos",
-
-  storageBucket: "validacion-costos.firebasestorage.app",
-
-  messagingSenderId: "234817361581",
-
-  appId: "1:234817361581:web:af208b4db40f0341a61824"
-
-};
-
+      apiKey: "AIzaSyA5h_-qtvMqrRCtyVBPNiV-JfX22sHuFaM",
+      authDomain: "validacion-costos.firebaseapp.com",
+      projectId: "validacion-costos",
+      storageBucket: "validacion-costos.firebasestorage.app",
+      messagingSenderId: "234817361581",
+      appId: "1:234817361581:web:af208b4db40f0341a61824"
+    };
 
     // Inicializar Firebase
     const app = initializeApp(firebaseConfig);
@@ -51,8 +43,7 @@
     window.dispatchEvent(new Event('firebase-ready'));
   </script>
 
-<style>
-    /* Carrusel de Fondo Profesional de Perfumería y Negocios */
+  <style>
     body {
       margin: 0;
       min-height: 100vh;
@@ -248,7 +239,7 @@
           </div>
           <div>
             <h1 class="text-xl font-extrabold tracking-wide analytics-title">ANALYTICS</h1>
-            <p class="text-xs text-slate-400">Control de Costos & Base en Tiempo Real (Firebase)</p>
+            <p class="text-xs text-slate-400">Control de Costos & Base en Tiempo Real (Firebase + Local)</p>
           </div>
         </div>
 
@@ -282,7 +273,7 @@
             <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-receipt text-amber-600"></i> Registrar Factura
             </h2>
-            <span class="text-xs font-medium bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full"><i class="fa-solid fa-wifi"></i> Cloud Sync</span>
+            <span class="text-xs font-medium bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full"><i class="fa-solid fa-cloud"></i> Dual Sync</span>
           </div>
 
           <form onsubmit="registrarCompra(event)" class="space-y-4">
@@ -336,7 +327,7 @@
             </div>
 
             <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 font-semibold py-2.5 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
-              <i class="fa-solid fa-shield-check"></i> Validar & Registrar en Firebase
+              <i class="fa-solid fa-shield-check"></i> Validar & Registrar Base
             </button>
           </form>
         </section>
@@ -450,7 +441,6 @@
   </div>
 
   <script>
-    // Carrusel de fondo
     const imagenesPerfumeria = [
       "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&w=1920&q=80",
       "https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=1920&q=80",
@@ -510,34 +500,40 @@
       document.getElementById('pinInput').value = '';
     }
 
-    // Estructura de Base de Datos Global
-    let baseDatos = { productos: {}, historial: [], proveedores: [], umbral: 5 };
+    // Estructura de Base de Datos Global con Respaldo Local + Firebase
+    let baseDatos = JSON.parse(localStorage.getItem('luxescent_db_respaldo')) || { productos: {}, historial: [], proveedores: [], umbral: 5 };
 
-    // Escuchar cambios en tiempo real desde Firebase Firestore
     window.addEventListener('firebase-ready', () => {
       const docRef = window.doc(window.db, "perfumeria", "controlPrecios");
-      window.onSnapshot(docRef, (docSnap) => {
+      window.onSnapshot(docRef, async (docSnap) => {
         if (docSnap.exists()) {
-          baseDatos = docSnap.data();
-          if (baseDatos.umbral !== undefined) {
-            document.getElementById('umbralAlerta').value = baseDatos.umbral;
+          const datosRemotos = docSnap.data();
+          if (datosRemotos && (Object.keys(datosRemotos.productos || {}).length > 0 || (datosRemotos.historial || []).length > 0)) {
+            baseDatos = datosRemotos;
+            localStorage.setItem('luxescent_db_respaldo', JSON.stringify(baseDatos));
+          } else if (Object.keys(baseDatos.productos || {}).length > 0) {
+            await window.setDoc(docRef, baseDatos);
           }
-          actualizarSelectProveedores();
-          actualizarSelectProductos();
-          renderizarTablas();
         } else {
-          // Si no existe el documento, crearlo por defecto
-          guardarEnFirebase();
+          await window.setDoc(docRef, baseDatos);
         }
+
+        if (baseDatos.umbral !== undefined) {
+          document.getElementById('umbralAlerta').value = baseDatos.umbral;
+        }
+        actualizarSelectProveedores();
+        actualizarSelectProductos();
+        renderizarTablas();
       });
     });
 
     async function guardarEnFirebase() {
+      localStorage.setItem('luxescent_db_respaldo', JSON.stringify(baseDatos));
       try {
         const docRef = window.doc(window.db, "perfumeria", "controlPrecios");
         await window.setDoc(docRef, baseDatos);
       } catch (error) {
-        console.error("Error al sincronizar con Firebase:", error);
+        console.error("Aviso: Trabajando con respaldo local:", error);
       }
     }
 
@@ -584,6 +580,7 @@
       }
       baseDatos.proveedores.push({ id: Date.now(), name: nombreLimpio, telefono: "" });
       guardarEnFirebase();
+      actualizarSelectProveedores();
       document.getElementById('proveedor').value = nombreLimpio;
       alert(`¡Proveedor "${nombreLimpio}" creado y seleccionado!`);
     }
@@ -602,7 +599,7 @@
       });
     }
 
-   function promptCrearProductoNuevo() {
+    function promptCrearProductoNuevo() {
       const nombreNuevo = prompt("Ingrese el nombre del nuevo perfume o producto:");
       if (!nombreNuevo || !nombreNuevo.trim()) return;
       const nombreLimpio = nombreNuevo.trim();
@@ -621,14 +618,14 @@
         precioAnterior: 0,
         precioActual: 0,
         proveedor: "Pendiente",
-        fechaCreacion: fechaHoy, // Guardamos la fecha de creación del artículo nuevo
+        fechaCreacion: fechaHoy,
         fecha: fechaHoy
       };
 
       guardarEnFirebase();
+      actualizarSelectProductos();
       document.getElementById('producto').value = nombreLimpio;
       
-      // Mostrar la información del artículo creado en la zona de alertas
       mostrarAlerta(`
         <div class="flex items-start gap-3">
           <i class="fa-solid fa-sparkles text-2xl text-indigo-600"></i>
@@ -645,7 +642,8 @@
 
       alert(`¡Producto "${nombreLimpio}" creado y seleccionado!`);
     }
-   function registrarCompra(e) {
+
+    function registrarCompra(e) {
       e.preventDefault();
       const proveedor = document.getElementById('proveedor').value.trim();
       const productoNombre = document.getElementById('producto').value.trim();
@@ -672,11 +670,10 @@
         porcentajeCalculado = parseFloat((((precioNuevo - precioAnterior) / precioAnterior) * 100).toFixed(2));
 
         if (precioNuevo > precioAnterior) {
-          // Botón de WhatsApp integrado para Alzas
           const botonWhatsApp = `
             <div class="mt-3">
               <button onclick="enviarAlzaWhatsApp('${productoNombre}', ${precioAnterior}, ${precioNuevo}, ${porcentajeCalculado}, '${fechaAnteriorCompra}', '${proveedor}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow transition">
-                <i class="fa-brands fa-whatsapp text-base"></i> Enviar Reporte de Alza por WhatsApp
+                <i class="fa-brands fa-whatsapp text-base"></i> Reportar Alza al Proveedor por WhatsApp
               </button>
             </div>`;
 
@@ -691,7 +688,7 @@
                     <li>• <strong>Nombre:</strong> ${productoNombre}</li>
                     <li>• <strong>Precio Antiguo:</strong> $${precioAnterior.toLocaleString('es-CO')} (${registroPrevio.proveedor})</li>
                     <li>• <strong>Precio Nuevo:</strong> $${precioNuevo.toLocaleString('es-CO')} (${proveedor})</li>
-                    <li>• <strong>Fecha Anterior de Compra:</strong> ${fechaAnteriorCompra}</li>
+                    <li>• <strong>Fecha Anterior:</strong> ${fechaAnteriorCompra}</li>
                   </ul>
                   ${botonWhatsApp}
                 </div>
@@ -707,7 +704,6 @@
                     <li>• <strong>Nombre:</strong> ${productoNombre}</li>
                     <li>• <strong>Precio Antiguo:</strong> $${precioAnterior.toLocaleString('es-CO')}</li>
                     <li>• <strong>Precio Nuevo:</strong> $${precioNuevo.toLocaleString('es-CO')}</li>
-                    <li>• <strong>Fecha Anterior de Compra:</strong> ${fechaAnteriorCompra}</li>
                   </ul>
                   ${botonWhatsApp}
                 </div>
@@ -795,6 +791,7 @@
       });
 
       guardarEnFirebase();
+      actualizarSelectProductos();
       mostrarAlerta(mensajeAlerta, tipoAlerta);
       renderizarTablas();
 
@@ -835,6 +832,7 @@
           let badge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">SIN CAMBIO</span>';
           let varTexto = '$0';
           let porcTexto = '0%';
+          let botonWhatsAppTabla = '';
 
           if (dif > 0) {
             countAlzas++;
@@ -847,6 +845,8 @@
             }
             varTexto = `<span class="text-rose-600 font-bold">+$${dif.toLocaleString('es-CO')}</span>`;
             porcTexto = `<span class="text-rose-600 font-bold">+${porc}%</span>`;
+            
+            botonWhatsAppTabla = `<button onclick="enviarAlzaWhatsApp('${prod.nombre}', ${prod.precioAnterior}, ${prod.precioActual}, ${porc}, '${prod.fecha || 'N/A'}', '${prod.proveedor}')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 p-2 rounded-lg transition mr-1" title="Reportar alza por WhatsApp"><i class="fa-brands fa-whatsapp text-sm"></i></button>`;
           } else if (dif < 0) {
             const porc = parseFloat((((prod.precioAnterior - prod.precioActual) / prod.precioAnterior) * 100).toFixed(1));
             badge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">BAJÓ</span>`;
@@ -863,7 +863,8 @@
               <td class="p-3">${varTexto}</td>
               <td class="p-3">${porcTexto}</td>
               <td class="p-3">${badge}</td>
-              <td class="p-3 text-center">
+              <td class="p-3 text-center flex justify-center items-center">
+                ${botonWhatsAppTabla}
                 <button onclick="eliminarProducto('${key}', '${prod.nombre}')" class="bg-rose-100 hover:bg-rose-200 text-rose-700 p-2 rounded-lg transition" title="Eliminar">
                   <i class="fa-solid fa-trash-can"></i>
                 </button>
@@ -878,7 +879,7 @@
 
       const tbodyHistorial = document.getElementById('tablaHistorial');
       tbodyHistorial.innerHTML = '';
-      baseDatos.historial.forEach(item => {
+      (baseDatos.historial || []).forEach(item => {
         if (item.producto.toLowerCase().includes(filtroHist) || item.proveedor.toLowerCase().includes(filtroHist)) {
           let difColor = "text-slate-600";
           let difSigno = "$0";
@@ -909,18 +910,23 @@
         delete baseDatos.productos[productoKey];
         baseDatos.historial = baseDatos.historial.filter(item => normalizarNombre(item.producto) !== productoKey);
         guardarEnFirebase();
+        actualizarSelectProductos();
+        renderizarTablas();
       }
     }
 
     function limpiarTodo() {
-      if (confirm("¿Estás seguro de borrar toda la base de datos en tiempo real?")) {
+      if (confirm("¿Estás seguro de borrar toda la base de datos?")) {
         baseDatos = { productos: {}, historial: [], proveedores: [], umbral: 5 };
         guardarEnFirebase();
+        actualizarSelectProveedores();
+        actualizarSelectProductos();
+        renderizarTablas();
       }
     }
 
     function exportarExcel() {
-      if (baseDatos.historial.length === 0) {
+      if (!baseDatos.historial || baseDatos.historial.length === 0) {
         alert("No hay registros para exportar.");
         return;
       }
@@ -970,20 +976,23 @@
             }
           });
           guardarEnFirebase();
-          alert("¡Importación y sincronización en la nube exitosa!");
+          actualizarSelectProductos();
+          renderizarTablas();
+          alert("¡Importación y sincronización exitosa!");
         } catch (err) {
           alert("Error al leer el archivo Excel.");
         }
       };
       lector.readAsArrayBuffer(archivo);
     }
- function enviarAlzaWhatsApp(nombreProd, precioAntiguo, precioNuevo, porc, fechaAntigua, proveedor) {
-      const telefonoDestino = ""; // Puedes dejarlo vacío para que el usuario elija el contacto o poner un número con código de país ej: 573000000000
-      const mensaje = `Hola, un cordial saludo 🌿.\n\nTe comparto el reporte de alza de precio detectado en el sistema:\n\n• *Artículo:* ${nombreProd}\n• *Proveedor:* ${proveedor}\n• *Precio Antiguo:* $${precioAntiguo.toLocaleString('es-CO')} (${fechaAntigua})\n• *Precio Nuevo:* $${precioNuevo.toLocaleString('es-CO')}\n• *Incremento:* +${porc}%\n\nAgradecemos de antemano su atención a esta variación para mantener la estabilidad del inventario. ¡Quedo atento!`;
+
+    function enviarAlzaWhatsApp(nombreProd, precioAntiguo, precioNuevo, porc, fechaAntigua, proveedor) {
+      const telefonoDestino = ""; // Déjalo vacío para elegir el contacto o pon el número (ej: 573000000000)
+      const mensaje = `Hola, un cordial saludo .\n\nLe comparto el reporte de alza de precio detectado en el sistema:\n\n• *Artículo:* ${nombreProd}\n• *Proveedor:* ${proveedor}\n• *Precio Antiguo:* $${precioAntiguo.toLocaleString('es-CO')} (${fechaAntigua})\n• *Precio Nuevo:* $${precioNuevo.toLocaleString('es-CO')}\n• *Incremento:* +${porc}%\n\nAgradecemos de antemano su atención a esta variación para mantener la estabilidad del inventario. ¡Quedo atento! Muchas gracias.`;
       
       const urlWhatsApp = `https://api.whatsapp.com/send?phone=${telefonoDestino}&text=${encodeURIComponent(mensaje)}`;
       window.open(urlWhatsApp, '_blank');
     }
- </script>
+  </script>
 </body>
 </html>
